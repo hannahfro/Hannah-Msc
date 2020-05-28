@@ -1,18 +1,10 @@
 import numpy as np
 
-def make_power_spectrum(data_1,data_2,dim,delta,nbins): 
-
-	#data_1 and data_2 are the two arrays who's intensities you want to cross-corr
-	#npix is the length of those arrays
+def make_power_spectrum(data,npix,dim,delta,nbins): 
     
     if dim == 3: 
-        fft_data_1 = np.fft.fftshift(np.fft.fftn(np.fft.fftshift(data_1))) #do this for each field 
-        fft_data_2 = np.fft.fftshift(np.fft.fftn(np.fft.fftshift(data_2)))
-
-
-     	ps_data = (np.conj(fft_data_1)*fft_data_2) + (np.conj(fft_data_2)*fft_data_1)#this has variance equal to p(k), numerator inside < >
-
-        npix = len(data_1) #make if statement about overlapping region if one dataset is larger than the other
+        fft_data = np.fft.fftn(np.fft.fftshift(data)) 
+        ps_data = np.abs(np.fft.fftshift(fft_data))**2 #this has variance equal to p(k)
         
         kx = np.fft.fftfreq(npix,delta)
         ky = np.fft.fftfreq(npix,delta)
@@ -45,13 +37,13 @@ def make_power_spectrum(data_1,data_2,dim,delta,nbins):
                             c[k] += 1
                             break 
                         
-        pk = (a/c) /(2*((delta*npix)**3))#take average and divide by area to get P(k)
+        pk = (a/c) /((delta*npix)**2) #take average and divide by area to get P(k)
         kmodes = bin_edges[1:]
         
     elif dim == 2: 
-        fft_data_1 = np.fft.fftshift(np.fft.fftn(np.fft.fftshift(data_1))) #do this for each field 
-        fft_data_2 = np.fft.fftshift(np.fft.fftn(np.fft.fftshift(data_2)))
-     	ps_data = (np.conj(fft_data_1)*fft_data_2) + (np.conj(fft_data_2)*fft_data_1)#this has variance equal to p(k), numerator inside < >
+        fft_data = np.fft.fft2(np.fft.fftshift(data))
+        ps_data = np.abs(np.fft.fftshift(fft_data))**2
+    
 
         kx = np.fft.fftfreq(npix,delta)
         ky = np.fft.fftfreq(npix,delta)
@@ -82,10 +74,7 @@ def make_power_spectrum(data_1,data_2,dim,delta,nbins):
                         break
                     
                     
-        pk = (a/c) /(2*(delta*npix)**2)
+        pk = (a/c) /((delta*npix)**2)
         kmodes = bin_edges[1:]
-
-        ##TO INCLUDE: Variance!!! 
         
-    return kmodes, pk, 
-
+    return kmodes, pk

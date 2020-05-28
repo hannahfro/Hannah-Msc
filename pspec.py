@@ -78,3 +78,6 @@ def make_power_spectrum(data,npix,dim,delta,nbins):
         kmodes = bin_edges[1:]
         
     return kmodes, pk
+
+
+    
