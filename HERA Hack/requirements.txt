@@ -1,0 +1,6 @@
+astropy
+astroquery
+h5py
+healpy
+
+
