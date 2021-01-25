@@ -40,8 +40,7 @@ class foregrounds(object):
 		self.beam_width = obs.beam_width
 
 
-		#inheret observation properties like where in the sky/at what freq the observation is made. 
-
+		#inheret observation properties like where in the sky/at what freq the observation is made.
 
 	def compute_synchro_pygsm(self):
 
@@ -53,10 +52,11 @@ class foregrounds(object):
 		see Oliveira-Costa et. al., (2008) and Zheng et. al., (2016)
 		'''
 
+		## MAKE THIS READ FROM pygdsm.bin
+
 		nside = 1024
-		df_gsm = pd.read_csv('pygsm_data.txt', sep=" ", header=None) # make this file binary
-		df_gsm.columns = ["Temp (K)"]
-		diffuse_synchrotron = df_gsm["Temp (K)"].to_numpy()
+		#Reads in the file for the frequecny in question
+		diffuse_synchrotron = np.fromfile('pygdsm_%sMHz.bin'%self.freq_fid, dtype=np.float32)
 
 		obs_index = hp.pixelfunc.ang2pix(nside, self.observable_coordinates[:,0],self.observable_coordinates[:,1])
 
@@ -176,7 +176,7 @@ class foregrounds(object):
 
 		return self.sources # THIS IS IN KELVIN
 
-	def bright_psource(self,nbins): #should also have preprocessed data  as input
+	def bright_psources(self,nbins): #should also be preprocessed 
 	#### SCOOP THE DATA FROM VIZIER CATALOG #####
 
 		''' 
@@ -239,7 +239,7 @@ class foregrounds(object):
 		psource_phi = np.asarray(psource_phi)
 		psource_theta = np.asarray(psource_theta)
 
-	###### ORGANIZING THE DATA BY DIST TO CENTRE OF BEAM ############
+	###### ORGANIZING THE DATA BY DIST TO CENTRE OF BEAM ############ I think that this is unecessary 
 		co_lat = np.pi / 2. - self.latitude
 
 		#DEC distance to centre of the beam, may need to do actual distance...
@@ -249,56 +249,79 @@ class foregrounds(object):
 		data = np.stack([psource_flux,psource_phi,psource_theta,dist_from_centre], axis = 1) # check axis stack
 
 		psource_data = data[np.argsort(data[:, 3])] #sort by distance from centre of beam (becuase that way you do the brightest possiblesources first = less computing time)
-		
+	
+
 	########## COMPUTE PBEAM #########################
 
 
 		phis = (2. * np.pi * self.times) + self.position[0,1]
 
-		primary = np.zeros((self.Nt, psource_data.shape[0]))
+		primary = np.zeros((self.Nt, psource_data.shape[0])) #Nt * n_sources
 
 		for i in range(self.Nt): #compute the elements of pbeam
 			primary[i] = np.exp(-((psource_data[:,1]-phis[i])**2 +(psource_data[:,2]-co_lat)**2)/float(self.beam_width**2), dtype = "float64")# 2D gaussian beam (N_position,2) 
-			#this primary beam should now be in order of closest to furthest
+		
+		#this primary beam should now be in order of closest to furthest
+
+
+########### PICK OUT ALL THE BRIGHT BOISS ###################
+# ## REDO THIS SECTION 
+
+# 		bin_index = np.int(len(primary[1])/nbins)
+
+# 		psource_final = []
+# 		psource_pbeam = []
+
+# 		for i in range(nbins):
+# 			#find max pbeam of all time
+# 			lower_bound = i*bin_index
+# 			upper_bound = (i+1)*bin_index
+# 			maxes = []
+# 			for j in range(self.Nt): 
+# 				maxes.append(max(primary[j,lower_bound:upper_bound]))
+		  
+# 			maxi = max(maxes) #This is now the max pbeam you use to check the fluxes
 			
+# 			for k in range(bin_index):
+# 				if psource_data[((i+1)*k),0]* maxi >= 0.100: #find the bright guys
+# 					psource_final.append(psource_data[((i+1)*k),:3]) #append bright guys' to final list
+# 					psource_pbeam.append(primary[:,((i+1)*k)]) # also make a list with that guys' primary beams 
 
-###########PICK OUT ALL THE BRIGHT BOISS ###################
-
-		bin_index = np.int(len(primary[1])/nbins)
+# 				else:
+# 					continue
 
 		psource_final = []
+		psource_pbeam = []
 
-		for i in range(nbins):
-			#find max pbeam of all time
-			lower_bound = i*bin_index
-			upper_bound = (i+1)*bin_index
-			maxes = []
-			for j in range(self.Nt): 
-				maxes.append(max(primary[j,lower_bound:upper_bound]))
-		  
-			maxi = max(maxes) #This is now the max pbeam you use to check the fluxes
-			
-			for k in range(bin_index):
-				if psource_data[((i+1)*k),0]* maxi >= 0.100: #find the bright guys
-					psource_final.append(psource_data[((i+1)*k),:3]) #append bright guys to final list
-				else:
-					continue
+		#this will replace the binned selection technique
+		#here we go through each source and check if it is bright enough to be seen even for 1 time, if so, append to list
+		for i in range(psource_data.shape[0]):
+			max_primary = max(primary[:,i]) #find the max primary value of all time for that source
+			if psource_data[i,0]*max_primary >= 0.100: #if max primary doesn't dampen flux below threshold
+				psource_final.append(psource_data[i,:3]) #append bright guys' to final list
+				psource_pbeam.append(primary[:,i]) # also make a list with that guys' primary beams 
+
+			else:
+				continue
+
 
 		self.psource_final = np.asarray(psource_final)
+		self.psource_pbeam = np.asarray(psource_pbeam)
+		self.psource_pbeam = self.psource_pbeam.T
 
-		print(self.psource_final)
+		#write pbeam to file
+    	self.psource_pbeam = self.psource_pbeam.astype(np.float32)
+    	self.psource_pbeam.tofile('psource_beam.bin')
 
 		self.compute_omega()
 
 		wavelength_fid = 1.525 #meters
 
-		temp_conv = (sc.c**2)/(2*sc.k*((self.freq_fid*1e6)**2))
+		#temp_conv = (sc.c**2)/(2*sc.k*((self.freq_fid*1e6)**2))
 
-		# temp_conv = (wavelength_fid**2)/(2*sc.k*self.omega_pix)
+		temp_conv = (wavelength_fid**2)/(2*sc.k*self.omega_pix) #off by factor of 10^26 haha
 
-		print(temp_conv)
-
-		self.psource_final[:,0] = self.psource_final[:,0]*temp_conv
+		self.psource_final[:,0] = (self.psource_final[:,0]*(10**(-26)))*temp_conv #convert jy to watt and then convert to K 
 		''' 
 							DATA STRUCTUE
 		--------------------------------------------------------
@@ -306,20 +329,26 @@ class foregrounds(object):
 		--------------------------------------------------------
 		'''
 
-		print(self.psource_final)
+		################### CONVERT TO 3D ##########################
 
-		# ################### CONVERT TO 3D ##########################
+		z_coord = np.zeros((self.psource_final.shape[0],1))
 
-		# z_coord = np.zeros((self.psource_final.shape[0],1))
+		self.psource_final = np.concatenate((self.psource_final, z_coord), axis = 1)
 
-		# self.psource_final = np.concatenate((self.psource_final, z_coord), axis = 1)
+		for i in range(self.psource_final.shape[0]):                       
+			self.psource_final[i,1] = np.sin(self.psource_final[i,1])*np.cos(self.psource_final[i,2])#X
+			self.psource_final[i,2] = np.sin(self.psource_final[i,1])*np.sin(self.psource_final[i,2])#Y
+			self.psource_final[i,4] = np.cos(self.psource_final[i,1])#Z   
 
-		# for i in range(self.psource_final.shape[0]):                       
-		# 	self.psource_final[i,1] = np.sin(self.psource_final[i,1])*np.cos(self.psource_final[i,2])#X
-		# 	self.psource_final[i,2] = np.sin(self.psource_final[i,1])*np.sin(self.psource_final[i,2])#Y
-		# 	self.psource_final[i,3] = np.cos(self.psource_final[i,1])#Z     
+		''' 
+							DATA STRUCTUE
+		--------------------------------------------------------
+		flux(K)   phi(rads)   theta(rads)   z(rads)   pbeam
+		--------------------------------------------------------
+		'''  
 
-		return self.psource_final #IN KELVIN
+		self.psource_final= self.psource_final.astype(np.float32)
+    	self.psource_final.tofile('psource_data.bin')#IN KELVIN
 
 	def diffuse_fg(self,n_sources,pygsm): #should also have data input
 

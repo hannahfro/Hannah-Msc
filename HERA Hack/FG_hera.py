@@ -50,7 +50,7 @@ class foregrounds(object):
 
 		pixel_flux_syn = []
 
-		alpha_syn = np.random.normal(alpha_0_syn,sigma_syn,self.Npix)
+		alpha_syn = np.random.normal(alpha_0_syn,sigma_syn,self.Npix) 
 
 		for i in range(self.Npix):
 		    flux = Asyn*(self.freq/self.freq_fid)**(-alpha_syn[i])

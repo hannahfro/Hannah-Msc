@@ -358,7 +358,7 @@ class observation(object):
 						  
 		AtA = ((np.conj(self.Amat)).T).dot(self.invN).dot(self.Amat)
 		
-		print(self.Amat.shape)
+		
 		#here we are setting all the non-diagonal elements of AtA to 0
 		
 		diagAtA = np.diag(AtA) #pick out the main diagonal
@@ -366,7 +366,7 @@ class observation(object):
 		matrix_diagAtA = np.diag(diagAtA) #make that diagonal into a diagonal matrix
 	
 		self.norm = la.inv(matrix_diagAtA) #take the diagonal matrix and take the inverse 
-		print(self.norm.shape)
+
 
 	def generate_map_noise(self,psources,fg):#DO NOT RETURN
 		"""

@@ -71,7 +71,7 @@ class test_tools():
         type_diffuse = type(diffuse)
 
         nt.assert_equal("%s" %type_diffuse, "<class 'numpy.ndarray'>")
-        nt.assert_equal(len(diffuse), self.obs.Npix)
+        nt.assert_equal(len(diffuse), (self.obs.Npix+self.fg.num_bright_guys)
 
 
 

@@ -39,11 +39,13 @@ class CII_fg(object):
 		This is the upper edge of your frequency bin in (GHz)
 
 	Recall that you need to define your bins in the following way:
+		
+		freq_bins = np.arange(185,310,0.4) 
+		test--> len(freq_bins) = 313 since the number of spectral channels is 312
 
-		freq_bins = np.arange(190,315,3)
-
-	Where 190 and 315 correspone to the upper and lower bound of the observing band 
-	and 3 correspons to the channel width all in units of GHz. 
+	Where 185 and 310 correspone to the upper and lower bound of the observing band 
+	and 0.4 correspons to the frequency resolution all in units of GHz. This means that ccat-p has 
+	312 spectral channels. 
 
 	"""
 
@@ -60,7 +62,7 @@ class CII_fg(object):
 
 		self.schecter_params = [['CO 1-0',[0,1,2,4,6],[-1.36,-1.49,-1.52,-1.71,-1.94],[6.97,7.25,7.30,7.26,6.99],[-2.85,-2.73,-2.63,-2.94,-3.46]],['CO 2-1',[0,1,2,4,6],[-1.35,-1.47,-1.52,-1.75,-2.00],[7.54,7.84,7.92,7.89,7.62],[-2.85,-2.72,-2.66,-3.00,-3.56]],['CO 3-2',[0,1,2,4,6],[-1.29,-1.47,-1.53,-1.76,-2.00],[7.83,8.23,8.36,8.26,7.95],[-2.81,-2.79,-2.78,-3.11,-3.60]],['CO 4-3',[0,1,2,4,6],[-1.29,-1.45,-1.51,-1.80,-2.03],[8.16,8.50,8.64,8.70,8.23],[-2.93,-2.84,-2.85,-3.45,-3.78]],['CO 5-4',[0,1,2,4,6],[-1.20,-1.47,-1.45,-1.76,-1.95],[8.37,8.80,8.74,8.73,8.30],[-2.94,-3.03,-2.80,-3.34,-3.67]],['CO 6-5',[0,1,2,4,6],[-1.15,-1.41,-1.43,-1.73,-1.93],[8.38,8.74,8.77,8.84,8.38],[-2.92,-2.92,-2.80,-3.40,-3.72]]]
 
-		self.ll_star = np.logspace(-3,1,100) # log space bins
+		self.ll_star = np.logspace(-3,1,100ERA) # log space bins
 		self.delta_l = self.ll_star[1]-self.ll_star[0]
 
 	def find_lines_in_bin(self):
@@ -143,6 +145,49 @@ class CII_fg(object):
 					self.L_tot[j] += (central_l*L_s) * numsources #luminosity of one (L,z) bin
 
 		return self.L_tot 
+
+class CCAT_P(object):
+
+''' This object simulated the observations from ccat-p by convolving the beam with a 3D gaussian'''
+
+	def __init__(self, beam_type):
+		self.beam_type = beam_type
+
+
+	def telescop(self): ## create 3D gaussian to convolve with sky 
+
+		if self.beam_type == 'gaussian':
+			freq_central = 0
+			channel_width = 0.1
+			sigma = 1
+			x = np.arange(-3*sigma,3*sigma,channel_width)
+			self.beam = np.exp(-((x-freq_central)/sigma)**2/2)
+		else:
+			raise ValueError('the beam gotta be gaussian for now...sorry')
+
+	def sensitivity(self):
+		''' I think that here there should be something like a primary beam in both spacial directions 
+		and along the frequency axis.
+
+		Adrian says just to have perfect spectral sensitivity in the observing range. Like a tophat. '''
+
+
+	def convolve_sky(self,vec):
+		''' Here you want to convolve your 3D signal with a 3D gaussian.
+		this smooths over spacial and spectral axes. 
+
+		A good way to do this would be to FFT both the signal and the gaussian and then just multiply 
+		instead of convolve. 
+
+		TEST: make sure that the naive fft multiplication FFT'd gives you the same result as convolution. '''
+
+		self.telescope()
+
+		self.map = np.convolve(vec,self.beam)
+
+		## here is 
+
+
 
 # #OLD DATA :
 # d = {'z': [0,1,1,2], 'obs freq': [230.54,230.52,288.13,230.49],'alpha':[-1.35,-1.45,-1.47,-1.43],'log_Ls':[7.54,8.50,8.80,8.77],'log_phi':[-2.85,-2.84,-3.03,-2.80]}

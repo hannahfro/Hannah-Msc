@@ -5,7 +5,7 @@ import numpy.random as ra
 from scipy import signal
 
 
-import astroquery
+
 from astroquery.vizier import Vizier
 
 import HERA_hack_FG
@@ -33,14 +33,11 @@ fg = FG_pygsm.foregrounds(obs,150)
 mid_pixel = np.int(fg.Npix*0.5098507)
 
 imp =  100000*signal.unit_impulse(fg.Npix+1, mid_pixel) #True sky we wanna see
-foregrounds = fg.diffuse_fg(n_dim_sources,32) #diffuse fg 
+foregrounds = fg.diffuse_fg(n_dim_sources,False) #diffuse fg 
 psource_data = fg.bright_psources(16)
 
-#MAPPING
-#sky_map_FG = np.real(obs.convolve_map(imp,psource_data,foregrounds))
-
-sky_map =  np.real(obs.convolve_map(imp,psource_data,fg))
+sky_map =  np.real(obs.convolve_map(imp,psource_data))
 
 
 
-np.savetxt('map_with_fg_ps.txt',sky_map)
+# np.savetxt('map_with_fg_ps.txt',sky_map)

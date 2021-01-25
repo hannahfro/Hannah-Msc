@@ -3,8 +3,7 @@ import numpy as np
 import numpy.linalg as la
 from scipy import signal
 from timeit import default_timer as timer
-
-
+import pandas as pd
 
 
 class telescope(object):
@@ -117,7 +116,6 @@ class observation(object):
 		self.Nbl = self.bls_celestial.shape[1]
 
 		
-
 	def observable_coordinates(self): #RETURN self.position
 		"""
 		Find the observable coordinates given the four corners of a patch
@@ -131,8 +129,9 @@ class observation(object):
 		beam_minus, beam_plus = np.array([-1, +1])*self.beam_width*self.beam_sigma_cutoff
 		min_corner = np.min(self.corners, axis=0)
 		max_corner = np.max(self.corners, axis=0)
+		 
 		min_obsbound = self.latitude + beam_minus #Here we're computing the size of the observing window
-		max_obsbound = self.latitude + beam_plus #bigger beam_width or sigma_cutoff means a larger observing window 
+		max_obsbound = self.latitude + beam_plus  #bigger beam_width or sigma_cutoff means a larger observing window 
 		#print(min_obsbound*180./np.pi,max_obsbound*180./np.pi)
 		# Now convert from latitude (measured from the equatorial plane up)
 		# to the polar angle (measured down from the z axis)
@@ -141,24 +140,34 @@ class observation(object):
 		max_obsbound = np.pi / 2. - min_obsbound 
 		min_obsbound = np.pi / 2. - max_swap
 		
+
 		if max_corner[0]*(np.pi/180.) < min_obsbound or min_corner[0]*(np.pi/180.) > max_obsbound:
 			raise ValueError('Requested Region is not observable')
 		else:
-			#print(min_obsbound*180./np.pi, max_obsbound*180./np.pi)
-			#print((min_corner[1]), (max_corner[1]))
-			#print(self.resol)
-			#assert False
 			thetas = np.arange(min_obsbound, max_obsbound, self.resol) 
 			phis = np.arange((min_corner[1]*(np.pi/180.)), (max_corner[1]*(np.pi/180.)), self.resol)
-			#print(thetas*180./np.pi)
-			#print(phis*180./np.pi)
-			
+		
 			self.position = np.concatenate(np.dstack(np.meshgrid(thetas, phis)))
 			self.Npix = self.position.shape[0]
 			
 			
 		return self.position
-		
+
+	def sky_shape(self):
+
+		self.observable_coordinates()
+
+		x = self.observable_coordinates()[:,1] #phi
+		y = self.observable_coordinates()[:,0]#theta
+
+		null = np.zeros(len(x))
+		df_check = pd.DataFrame.from_dict(np.array([x,y,null]).T)
+
+		df_check.columns = ['phi','theta','temp']
+
+		pivotted_obs_check= df_check.pivot('theta','phi','temp')
+		self.sky_shape = pivotted_obs_check.shape
+		return(self.sky_shape)
 
 	def necessary_times(self): #REUTRN self.times
 		"""
@@ -238,7 +247,7 @@ class observation(object):
 		return transformed 
 		
 	
-	def compute_bdotr(self, psources): #DO NOT RETURN psources is a nsources x 4 array  
+	def compute_bdotr(self, psource_data): #DO NOT RETURN psources is a nsources x 4 array  
 		"""
 		Given an array of times and sky positions,
 		computes an (N_times,N_pos) array
@@ -253,9 +262,9 @@ class observation(object):
 		position3d = self.convert_to_3d()
 		 
 
-		if psources is not None: 
-	   
-			position3d = np.concatenate((position3d, psources[:,1:]), axis=0)
+		if psource_data is not None: 
+			self.psources= np.fromfile('psource_data.bin', dtype=np.float32)
+			position3d = np.concatenate((position3d, self.psources[:,1:]), axis=0)
 
 		else:
 			pass 
@@ -265,10 +274,9 @@ class observation(object):
 		# Result is a N_t N_bl x N_pix (+ N_souces) array
 		# Cycles through time more rapidly than baselines
 
-		# print(position3d.shape)
 		self.bdotr = np.dot(self.bl_times, position3d.T)
 
-	def compute_beam(self,psources): #DO NOT RETURN
+	def compute_beam(self,psource_beam): #DO NOT RETURN
 		"""
 		Compute Primary Beam assuming all antenna has an identical beam with the fixed sky.
 		"""
@@ -283,7 +291,7 @@ class observation(object):
 		# nsources = len(psources)
 		# print(nsources)
 
-		phi = np.concatenate((self.position[:,1],),axis = 0)
+		# phi = np.concatenate((self.position[:,1],),axis = 0)
 
 		if self.beam == 'gaussian':
 			primary = np.zeros((self.Nt, (self.Npix)))
@@ -293,7 +301,14 @@ class observation(object):
 			for i in range(self.Nt): #compute the elements of pbeam
 				primary[i] = np.exp(-((self.position[:,1]-phis[i])**2 +(self.position[:,0]-co_lat)**2) / float(self.beam_width**2))# 2D gaussian beam (N_position,2)
 		
-			
+			if psource_beam is not None: 
+				# concatenate the psource primary here
+				psource_primary = np.fromfile('psource_beam.bin', dtype=np.float32)
+				primary = np.concatenate((primary, psource_primary), axis=1)
+			else:
+				pass
+
+
 
 		else:
 			raise NotImplementedError()
@@ -305,7 +320,7 @@ class observation(object):
 		self.pbeam = np.vstack([primary] * self.Nbl) #to replace the for loop pbeam
 		
 	
-	def compute_Amat(self,psources): #DO NOT RETURN
+	def compute_Amat(self,psource_data, psource_beam): #DO NOT RETURN
 		"""
 		Compute A matrix
 		"""
@@ -314,8 +329,8 @@ class observation(object):
 		else:   
 			self.times = self.necessary_times()
 			
-		self.compute_beam(psources)
-		self.compute_bdotr(psources)
+		self.compute_beam(psource_beam)
+		self.compute_bdotr(psource_data)
 		
 		wavelength = (3e8)/float(self.freq*1e6) # in m
 
@@ -339,28 +354,25 @@ class observation(object):
 		self.invN = np.diag(np.repeat(self.ucounts, self.Nt)) * (1/float((self.noise_rms)**2)) #Nt N_unique_bls x Nt N_unique_bls diagonal array
 	
 
-	def compute_vis(self,vec,psources): #DO NOT RETURN
+	def compute_vis(self,vec,psource_data, psource_beam): #DO NOT RETURN
 		"""
 		Compute visibility from given vector
 		"""
-		self.compute_Amat(psources)
+		self.compute_Amat(psource_data, psource_beam)
 
-		if psources is not None: 
-			vec = np.concatenate((vec,psources[:,0]), axis = 0) 
-			# print(len(vec))
-			# print(len(fg))
-			# print(len(psources[:,0]))
-			
+		if psource_data is not None: 
+			vec = np.concatenate((vec,self.psources[:,0]), axis = 0) 
 
 		else: 
 			pass
+		
 
 		self.Adotx = np.dot(self.Amat, vec) 
 
-	def compute_normalization(self, psources): #DO NOT RETURN
+	def compute_normalization(self,psource_data, psource_beam): #DO NOT RETURN
 
 		 ## compute [A^*t N^{-1} A]^{-1}
-		self.compute_Amat(psources)
+		self.compute_Amat(psource_data, psource_beam)
 						  
 		AtA = ((np.conj(self.Amat)).T).dot(self.invN).dot(self.Amat)
 		
@@ -374,7 +386,7 @@ class observation(object):
 		self.norm = la.inv(matrix_diagAtA) #take the diagonal matrix and take the inverse 
 		# print(self.norm.shape)
 
-	def generate_map_noise(self,psources):#DO NOT RETURN
+	def generate_map_noise(self,psource_data, psource_beam):#DO NOT RETURN
 		"""
 		Draw Gaussian random white noise from noise rms
 		Returns to normalized noise prediction
@@ -383,7 +395,7 @@ class observation(object):
 		if self.norm is not None:
 			pass
 		else:
-			self.compute_normalization(psources)
+			self.compute_normalization(psource_data, psource_beam)
 				   
 
 		self.my_noise = np.random.randn(self.Nt*self.Nbl) + np.random.randn(self.Nt*self.Nbl)*(1j)
@@ -401,27 +413,48 @@ class observation(object):
 
 			return self.noise
 
-	def single_pix_convolve_map(self,pix,vec,psources):
+	
+	def single_pix_convolve_map(self,pix,vec,psource_data, psource_beam):
 
-		start = timer()
+		# start = timer()
 
 		if self.norm is not None:
 			pass
 		else:
-			self.compute_normalization(psources)
+			self.compute_normalization(psource_data, psource_beam)
 
 
-		self.compute_vis(vec,psources)
+		self.compute_vis(vec,psource_data,psource_beam)
+
+		if self.normalization == True: 
+			self.map = (((np.conj(self.Amat)).T)[pix]).dot(self.invN).dot(self.Adotx)
+
+		else: 
 		
-		self.map = ((np.conj(self.Amat)).T)[pix].dot(self.invN).dot(self.Adotx)
+			self.map = (((np.conj(self.Amat)).T)[pix]).dot(self.invN).dot(self.Adotx)
 
-		return self.map
-		end = timer()
-		runtime = end-start
-		return runtime 
+			return self.map
+		# end = timer()
+		# runtime = end-start
+		# return runtime 
+
+	def compute_M(self,psource_data,psource_beam):
+
+		if self.norm is not None:
+			pass 
+		else: 
+			self.compute_normalization(psource_data,psource_beam)
+
+		self.compute_Amat(psource_data,psource_beam)
+
+		if self.normalization == True:
+			self.Mmat = np.dot(self.norm,((np.conj(self.Amat)).T).dot(self.invN).dot(self.Amat))
+
+		else:
+			self.Mmat = ((np.conj(self.Amat)).T).dot(self.invN).dot(self.Amat)
 
  
-	def convolve_map(self,vec,psources): #DO NOT RETURN
+	def convolve_map(self,vec,psource_data,psource_beam ): #DO NOT RETURN
 		
 		
 		"""
@@ -434,12 +467,13 @@ class observation(object):
 		if self.norm is not None:
 			pass
 		else:
-			self.compute_normalization(psources)
-			
-		self.compute_vis(vec,psources)
-		
+			self.compute_normalization(psource_data, psource_beam)
+
+		self.compute_vis(vec,psource_data, psource_beam)
+	
 		
 		if self.normalization == True: #uses the normalization in the estimator
+
 			
 			self.map = np.dot(self.norm,((np.conj(self.Amat)).T).dot(self.invN).dot(self.Adotx))
 			
@@ -450,6 +484,8 @@ class observation(object):
 			# return runtime
 			
 		else: #leaves out the normalization 
+
+
 			self.map = ((np.conj(self.Amat)).T).dot(self.invN).dot(self.Adotx)
 		
 			return self.map
@@ -457,6 +493,5 @@ class observation(object):
 			# runtime = end-start
 			# return runtime 
 			
-
 
 		
