@@ -20,9 +20,12 @@ class Window_Function(object):
 		self.npix_row = npix_row
 		self.npix_col= npix_col
 		self.nbins = nbins
-		self.delta_krow = L_y/self.npix_row
-		self.delta_kcol = L_x/self.npix_col
+		self.delta_row = L_y/self.npix_row
+		self.delta_col = L_x/self.npix_col
+		self.L_x = L_x
+		self.L_y = L_y
 
+		
 	def FFT(self): 
 
 		''' Here we compute the 2D fft and also find the correspinding k's'''
@@ -35,61 +38,62 @@ class Window_Function(object):
 		for i in range(self.Npix): 
 			m = self.M_matrix[i]
 			m = np.reshape(m,(self.npix_col, self.npix_row))#this stacks rows of m 
-			m_bar = np.fft.fft2(m) 
-			if i == 1:
-				k_col = np.fft.fftfreq(m_bar.shape[0],d = self.delta_kcol) #need to add 2pis
-				k_row = np.fft.fftfreq(m_bar.shape[1], d = self.delta_krow) # need to add 2pis
+			m_fft = np.fft.fft2(m) 
+			# Gotta shift both axes
+			if i == 0:
+				k_col = np.fft.fftshift(np.fft.fftfreq(m_fft.shape[0], d = self.delta_col)) 
+				k_row = np.fft.fftshift(np.fft.fftfreq(m_fft.shape[1], d = self.delta_row)) 
 			else:
 				pass
-			m_bar = np.reshape(m_bar,(self.Npix,))
+			#gotta shift so that k's and things are aligned 
+			m_shift1 = np.fft.fftshift(m_fft,axes = 0)
+			m_shift2 = np.fft.fftshift(m_shift1, axes = 1)
+			m_bar = np.reshape(m_shift2,(self.Npix,))
 			M_bar.append(m_bar)
 
-		Mbar = np.asarray(M_bar)
+		k_col *= 2*np.pi
+		k_row *= 2*np.pi
+
+		self.Mbar = np.asarray(M_bar)
 		self.M_tilde = []
 
 		#second 2d fft where we fold each column, 2d fft it, and unfold it. 
+
 		for i in range(self.Npix): 
-			m = Mbar[:,i]
+			m = self.Mbar[:,i]
 			m = np.reshape(m,(self.npix_col,self.npix_row))#this stacks rows of m so m[50]=m[1,0]
-			m_bar = np.fft.fft2(m)
-			m_bar = np.reshape(m_bar,(self.Npix,))
+			m_fft = np.fft.fft2(m)
+			#gotta shift both axes
+			m_shift1 = np.fft.fftshift(m_fft,axes = 0)
+			m_shift2 = np.fft.fftshift(m_shift1,axes = 1)
+			#gotta flip both axes
+			m_flip1 = np.flip(m_shift2 ,axis = 1) 
+			m_flip2 = np.flip(m_flip1, axis = 0)
+
+			m_bar = np.reshape(m_shift2,(self.Npix,))
 			self.M_tilde.append(m_bar)
 
-		self.M_tilde = np.asarray(self.M_tilde).T
+		self.M_tilde = np.asarray(self.M_tilde).T # this is in fact not exactly M tilde, but has some elements swapped places along axis 1
 
 		#should have a line here that has all of the k values of all the entries. call is self.k
 		k = []
-		#you UST loMop through the row first then the col in order to match m reshape
+		#you MUST loop through the row first then the col in order to match m reshape
 		for i in range(len(k_row)): 
 			for j in range(len(k_col)):
 				k.append(np.sqrt(k_col[j]**2 + k_row[i]**2))
 
 		self.k = np.asarray(k)
 
+		self.window = ((np.conj(self.M_tilde)))*(self.M_tilde) # now we have the full npix x npix window matrix.
+
 		#so now, it should be the case that if i reshape k, k[30] = k_reshape[1,0] --> can be a test
 		#k_reshape = np.reshape(k,(50,30)) #make sure same reshape as m in the loop.
 
 	
-	def negative_index(self):
-
+	def sort_by_k(self):
 		self.FFT()
 
-		''' It turns out that the Window function is what i like to call the 
-		"almost" fourier transform of M. The difference is that some of the poisitons of entries
-		of the second index are swapped. This method does the entry swapping as well as the mod-suqaring.'''
-
-		Wmat = np.zeros_like(self.M_matrix)
-
-		for i in range(Wmat.shape[0]):
-			for j in range(Wmat.shape[1]):
-				Wmat[i,j] = self.M_tilde[i,-j] #this used to be M_tilde_sorted
-
-		self.window = ((np.conj(Wmat)))*(Wmat) # now we have the full npix x npix window matrix.
-
-	def sort_by_k(self):
-		self.negative_index()
-
-		s=np.argsort(self.k)
+		s = np.argsort(self.k)
 		J = np.take(self.window,s,axis = 0) #axis 0 reorders rows, this used to be M_tilde
 		window_sorted = np.take(J,s,axis =1)#axis 1 sorts the columns into the right order
 		self.window_sorted = np.asarray(window_sorted) #why is this transpose here??? I think because of reshaping but check
@@ -172,7 +176,6 @@ class Window_Function(object):
 			arg = np.argwhere(np.isnan(self.pspec_binned)) # Make sure there are no nans! If there are make them zeros. 
 			if len(arg) > 0:
 				self.pspec_binned[arg] = 0
-				print(self.pspec_binned)
 			else:
 				pass
 
@@ -203,12 +206,14 @@ class Window_Function(object):
 			if np.all(np.diff(areas) > 0) == True:
 				pass
 			else:
-				print('areas fail')
+				pass
+				#print('areas fail')
 
 			if np.all(np.diff(self.bin_edges) > 0) == True: 
 				pass
 			else:
-				print('k fail')	
+				pass
+				#print('k fail')	
 
 			f = interp1d(areas,self.bin_edges[:self.nbins]) # interpolate the inverse function integral  = f(k) (remove the rightmost bin edge!)
 			self.k_to_plot.append(float(f(0.5))) # append the k where the area under the curve is 50% of the total
@@ -224,10 +229,7 @@ class Window_Function(object):
 
 		self.pspec_estimate = np.dot(self.window_binned,self.pspec_binned)
 
-		print(self.pspec_binned)
-		print(self.pspec_estimate)
-
-		return  self.k_to_plot , self.bin_edges , self.pspec_estimate 
+		return  self.k_to_plot, self.bin_edges, self.pspec_estimate
 
 
 

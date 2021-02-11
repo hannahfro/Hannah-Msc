@@ -112,7 +112,7 @@ class observation(object):
 		self.freq = freq #MHz
 		self.resol = resol # deg
 		self.resol *= np.pi/180.
-		
+
 		self.Nbl = self.bls_celestial.shape[1]
 
 		
@@ -145,6 +145,7 @@ class observation(object):
 			raise ValueError('Requested Region is not observable')
 		else:
 			thetas = np.arange(min_obsbound, max_obsbound, self.resol) 
+
 			phis = np.arange((min_corner[1]*(np.pi/180.)), (max_corner[1]*(np.pi/180.)), self.resol)
 		
 			self.position = np.concatenate(np.dstack(np.meshgrid(thetas, phis)))
