@@ -153,7 +153,7 @@ class foregrounds(object):
 			#repat for all r in R
 			return [int(s[np.argwhere(cum_prob == min(cum_prob[(cum_prob - r) > 0]))]) for r in R]
 
-		alpha_0 = 2.5
+		alpha_0 = .5
 		sigma = 0.5
 	
 		self.compute_omega()
