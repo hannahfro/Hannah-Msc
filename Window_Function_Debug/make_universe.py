@@ -81,17 +81,30 @@ class universe(object):
 		self.compute_kbox()
 		#here's the box that will hold the random gaussian things
 
-		fft_box = np.zeros_like(self.kbox, dtype = complex)
+		self.fft_box = np.zeros_like(self.kbox, dtype = complex)
 
 
+		self.fft_box = np.zeros_like(self.kbox, dtype = complex)
+		a = np.random.normal(size = (self.row_npix,self.col_npix))
+		b = np.random.normal(size = (self.row_npix,self.col_npix))
+
+		self.fft_box = a +(1j*b)
+
+		self.stdev_box = np.zeros_like(self.fft_box)
 		
 		for i in range(self.row_npix):
 			for j in range(self.col_npix): 
 				stdev = np.sqrt(self.ps(self.kbox[i,j])/2) # [mk Mpc]
-				a = float(np.random.normal(0, stdev))  
-				b = float(np.random.normal(0, stdev))
-				fft_box[i,j] = complex(a,b) 	
 
+				radius = np.sqrt((j-(self.col_npix/2))**2 + (i-(self.row_npix/2))**2)
+				if  3 < radius < 8:
+			
+					self.stdev_box[i,j] = 1
+				else:
+					self.stdev_box[i,j] = 0 
+		
+		self.fft_box_stdev = self.fft_box * self.stdev_box
+ 
 	######### IMPOSE SYMMETRY CONDITIONS SO THAT IFT IS REAL #########
 
 		for i in range(self.row_npix):
@@ -109,20 +122,48 @@ class universe(object):
 
 				if mirror_i == i and mirror_j == j: 
 					# must be real
-					fft_box[i,j] = np.real(fft_box[i,j]) #only number equal to its own complex conjugate are real numbers
+					self.fft_box[i,j] = np.real(self.fft_box[i,j]) #only number equal to its own complex conjugate are real numbers
 				else:
 				# copy complex conjugate from mirror coordinates to current coord
-					fft_box[i,j] = np.conjugate(fft_box[mirror_i,mirror_j])
+					self.fft_box[i,j] = np.conjugate(self.fft_box[mirror_i,mirror_j])
 
 	########################################################################
 
-		fft_box *= np.sqrt((self.Lx*self.Ly)) # [mk Mpc^2]
+
+		######### IMPOSE SYMMETRY CONDITIONS SO THAT IFT IS REAL #########
+
+		for i in range(self.row_npix):
+			for j in range(self.col_npix):
+
+				if self.row_npix % 2 == 0: # if rows even 
+					mirror_i = (self.row_npix - i ) % self.row_npix
+				else: # if rows odd
+					mirror_i = (self.row_npix-1)-i
+
+				if self.col_npix % 2 == 0: #if cols even
+					mirror_j = (self.col_npix - j ) % self.col_npix
+				else: #if cols odd
+					mirror_j = (self.col_npix-1)-j
+
+				if mirror_i == i and mirror_j == j: 
+					# must be real
+					self.fft_box_stdev[i,j] = np.real(self.fft_box_stdev[i,j]) #only number equal to its own complex conjugate are real numbers
+				else:
+				# copy complex conjugate from mirror coordinates to current coord
+					self.fft_box_stdev[i,j] = np.conjugate(self.fft_box_stdev[mirror_i,mirror_j])
+
+	########################################################################
 
 
-		self.u = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(fft_box * (self.delta_ky*self.delta_kx)))) #[mk]
+		self.fft_box *= np.sqrt((self.Lx*self.Ly)) # [mk Mpc^2]
+
+		self.fft_box_stdev *= np.sqrt((self.Lx*self.Ly)) # [mk Mpc^2]
+		self.u = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(self.fft_box * (self.delta_ky*self.delta_kx)))) #[mk]
+		self.u_stdev = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(self.fft_box_stdev * (self.delta_ky*self.delta_kx)))) #[mk]
+
 
 		self.u /= (2.*np.pi)**2
-
+		self.u_stdev /= (2.*np.pi)**2
 		
 		if self.mean is not None: 
 
@@ -133,8 +174,13 @@ class universe(object):
 
 		else: 
 			self.universe = (np.real(self.u))
+			self.universe_stdev = (np.real(self.u_stdev))
+		
 
-		return self.universe
+		return self.universe , self.universe_stdev
+
+
+
 
 
 

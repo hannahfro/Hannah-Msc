@@ -34,7 +34,7 @@ class Power_Spectrum(object):
         # self.data = self.data - mean_arr
 
         fft_data = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(self.data* (self.delta_x*self.delta_y))))  # [mk mpc^2]
-        self.ps_data = (np.conj(fft_data))*fft_data # [mk^2 mpc^4]
+        self.ps_data = (np.conj(fft_data))*fft_datas # [mk^2 mpc^4]
 
     def compute_k_2D(self):
 

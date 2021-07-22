@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
+import scipy.integrate as integrate
 from astropy.cosmology import WMAP9 as cosmo
 import matplotlib.pyplot as plt
 
@@ -82,10 +83,7 @@ class Window_Function(object):
 			m_bar = np.reshape(m_fft,(self.Npix,))
 			self.M_tilde.append(m_bar)
 
-		self.M_tilde = np.asarray(self.M_tilde).T# unit Mpc^2 this is in fact not exactly M tilde, but has some elements swapped places along axis 1
-
-		
-		
+		self.M_tilde = np.asarray(self.M_tilde).T# unit Mpc^2 this is in fact not exactly M tilde, but has some elements swapped places along axis 1		
 		# should be the case that this times x_true_tilde = x_obs_tilde 
 
 		#should have a line here that has all of the k values of all the entries. call is self.k
@@ -97,7 +95,7 @@ class Window_Function(object):
 
 		self.k = np.asarray(k)
 
-		self.window = np.real((np.conj(self.M_tilde))*(self.M_tilde))# now we have the full npix x npix window matrix. 
+		self.window = np.real((self.M_tilde)*(np.conj(self.M_tilde).T))# now we have the full npix x npix window matrix. 
 		## CORRECT UNTIL HERE!
 
 		factor = (self.L_x*self.L_y)
@@ -303,7 +301,13 @@ class Window_Function(object):
 
 		elif callable(pspec): 
 			# this is the case wehre psepc is a callable function
-			self.pspec_binned = pspec(self.bin_edges[1:])
+
+			self.pspec_binned = []
+
+			for i in range(len(self.bin_edges)-1):
+				delta_bin = np.abs(self.bin_edges[i+1] - self.bin_edges[i])
+				ps_bin = (1/delta_bin) * integrate.quad(pspec,self.bin_edges[i],self.bin_edges[i+1])[0]
+				self.pspec_binned.append(ps_bin)
 
 		else: 
 			raise ValueError('Please give me a theoretical spectrum!')
@@ -333,13 +337,13 @@ class Window_Function(object):
 				pass
 			else:
 				pass
-				print('areas fail')
+				# print('areas fail')
 
 			if np.all(np.diff(self.bin_edges) > 0) == True: 
 				pass
 			else:
 				pass
-				print('k fail')	
+				# print('k fail')	
 
 			f = interp1d(areas,self.bin_edges[:self.nbins]) # interpolate the inverse function integral  = f(k) (remove the rightmost bin edge!)
 			self.k_to_plot.append(float(f(0.5))) # append the k where the area under the curve is 50% of the total
@@ -356,7 +360,7 @@ class Window_Function(object):
 		self.evaluate_pspec_theory(pspec)
 		self.k_plotting()
 
-		self.pspec_estimate = np.matmul(self.window_binned,self.pspec_binned) #unit of mk^2 Mpc^2 since window is unitless
+		self.pspec_estimate = np.dot(self.window_binned,self.pspec_binned) #unit of mk^2 Mpc^2 since window is unitless
 
 
 		return  self.k_to_plot, self.bin_edges, self.pspec_estimate

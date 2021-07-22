@@ -82,15 +82,16 @@ class universe(object):
 		#here's the box that will hold the random gaussian things
 
 		fft_box = np.zeros_like(self.kbox, dtype = complex)
+		a = np.random.normal((row_npix,col_npix))
+		b = np.random.normal((row_npix,col_npix))
 
-
+		fft_box = a+(1j*b)
 		
 		for i in range(self.row_npix):
 			for j in range(self.col_npix): 
 				stdev = np.sqrt(self.ps(self.kbox[i,j])/2) # [mk Mpc]
-				a = float(np.random.normal(0, stdev))  
-				b = float(np.random.normal(0, stdev))
-				fft_box[i,j] = complex(a,b) 	
+				fft_box[i,j] *= stdev
+		
 
 	######### IMPOSE SYMMETRY CONDITIONS SO THAT IFT IS REAL #########
 
