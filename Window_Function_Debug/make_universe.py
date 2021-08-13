@@ -101,7 +101,7 @@ class universe(object):
 			
 					self.stdev_box[i,j] = 1
 				else:
-					self.stdev_box[i,j] = 0 
+					self._box[i,j] = 0 
 		
 		self.fft_box_stdev = self.fft_box * self.stdev_box
  

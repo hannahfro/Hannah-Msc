@@ -4,7 +4,7 @@ import numpy.linalg as la
 from scipy import signal
 from timeit import default_timer as timer
 import pandas as pd
-
+import matplotlib.pyplot as plt
 
 class telescope(object):
 	"""
@@ -165,15 +165,21 @@ class observation(object):
 		min_corner = np.min(self.corners, axis=0)
 		max_corner = np.max(self.corners, axis=0)
 		 
-		min_obsbound = self.latitude + beam_minus #Here we're computing the size of the observing window
-		max_obsbound = self.latitude + beam_plus  #bigger beam_width or sigma_cutoff means a larger observing window 
+		# min_obsbound = self.latitude + beam_minus #Here we're computing the size of the observing window
+		# max_obsbound = self.latitude + beam_plus  #bigger beam_width or sigma_cutoff means a larger observing window 
+
+
 		#print(min_obsbound*180./np.pi,max_obsbound*180./np.pi)
 		# Now convert from latitude (measured from the equatorial plane up)
 		# to the polar angle (measured down from the z axis)
 		# Note how "max" and "min" swap places here
-		max_swap = max_obsbound
-		max_obsbound = np.pi / 2. - min_obsbound 
-		min_obsbound = np.pi / 2. - max_swap
+
+		# max_swap = max_obsbound
+		# max_obsbound = np.pi / 2. - min_obsbound 
+		# min_obsbound = np.pi / 2. - max_swap
+		
+		min_obsbound = min_corner[0]*(np.pi/180)
+		max_obsbound = max_corner[0]*(np.pi/180)
 		
 
 		if max_corner[0]*(np.pi/180.) < min_obsbound or min_corner[0]*(np.pi/180.) > max_obsbound:
@@ -219,7 +225,6 @@ class observation(object):
 			self.position = self.observable_coordinates() 
 			
 		time_length = np.abs(self.position[self.position.shape[0]-1,1]-self.position[0,1])/ (np.pi*2.)#fraction of roation you've completed in observing window
-		
 		self.times = np.arange(0., time_length, self.delta_t)#units here odn't make sense
 		self.Nt = len(self.times) #this is the number of times the telescope makes an observation
 		return self.times # in fraction of circle
@@ -441,8 +446,7 @@ class observation(object):
 			self.compute_normalization(psource_data, psource_beam)
 				   
 
-		self.my_noise = np.random.randn(self.Nt*self.Nbl) + np.random.randn(self.Nt*self.Nbl)*(1j)
-		
+		self.my_noise = np.random.normal(0, 0.091704138,self.Nt*self.Nbl) + np.random.normal(0,0.091704138,self.Nt*self.Nbl)*(1j)
 		if self.normalization == True: #uses the normalization in the estimator
 
 

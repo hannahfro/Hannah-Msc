@@ -18,7 +18,7 @@ class Window_Function(object):
 	Note to self: try to implement a function that auto-bins in bayesian block binning
 	"""
 	
-	def __init__(self, M_matrix, npix_row, npix_col,Lx,Ly,freq, nbins):
+	def __init__(self, M_matrix,G_matrix, npix_row, npix_col,Lx,Ly,freq, nbins):
 		
 		self.Npix = M_matrix.shape[1]
 		self.npix_row = npix_row
@@ -40,7 +40,7 @@ class Window_Function(object):
 		
 
 		self.M_matrix = np.real(M_matrix)
-
+		self.G_matrix = G_matrix
 		
 	def FFT(self): 
 
@@ -99,10 +99,16 @@ class Window_Function(object):
 	
 
 ######################## METHODS RELATED TO POWER SPECTRUM ESTIMATION ################################
+	def compute_cross(self):
+
+		self.FFT()
+
+		self.window = np.real((self.G_matrix)*(np.conj(self.G_matrix)))#
+
 
 	def p_estimate_full(self,cov):
 
-		self.FFT()
+		self.compute_cross()
 
 		'''compute the full k-vector estimate spectrum takes in the un-sorted covariance diagonal of the input theory field'''
 
@@ -135,23 +141,32 @@ class Window_Function(object):
 
 		self.sort_estimate_spec(cov)
 
-		hist, self.bin_edges = np.histogram(self.k_sorted, bins = self.nbins)
+		idx = np.argwhere(self.k_sorted > 0.15)
+
+		self.k_del = np.delete(self.k_sorted,idx) 
+
+		indices = np.argsort(self.k_del)
+		self.MM_cov_del = np.delete(self.MM_cov_diag_sorted, idx)
+		self.MM_cov_del = np.take(self.MM_cov_del,indices)
+		self.k_del = np.sort(self.k_del)
+
+		hist, self.bin_edges = np.histogram(self.k_del, bins = self.nbins)
 		self.pk_window_binned = np.zeros(self.nbins)
 
 		min_index = 0
 		for i in range(len(self.bin_edges)-1): #pick a bin!
-		    max_index = np.sum(hist[:i+1])#hist[i] + min_index 
-		    min_index = np.sum(hist[:i])
-		    a = np.sum(self.MM_cov_diag_sorted[min_index:max_index]) #for row j, sum the columns from min to max index of the bin
-		    c = hist[i] #number of P_k values in that bin 
-		    self.pk_window_binned[i] = a/c #compute average W that bin
+			max_index = np.sum(hist[:i+1])#hist[i] + min_index 
+			min_index = np.sum(hist[:i])
+			a = np.sum(self.MM_cov_del[min_index:max_index]) #for row j, sum the columns from min to max index of the bin
+			c = hist[i] #number of P_k values in that bin 
+			self.pk_window_binned[i] = a/c #compute average W that bin
 
 
 	def compute_pspec_estimate(self,cov): 
 
 		self.spec_binning(cov)
 
-		return  self.bin_edges[1:], self.pk_window_binned
+		return  self.bin_edges[1:self.nbins], self.pk_window_binned[1:] # leave out the bottom and top bin edge, don't plot bottom bin cuz has k = 0 in it
 
 
 ######################################################################################################
@@ -172,20 +187,7 @@ class Window_Function(object):
 
 		hist, self.bin_edges = np.histogram(self.k_sorted, bins = self.nbins)
 
-		self.W_col_collapse = np.zeros((self.Npix,self.nbins))
-
-		for j in range(self.Npix): # pick a row!
-			min_index = 0
-			for i in range(len(self.bin_edges)-1): #pick a bin!
-				max_index = np.sum(hist[:i+1])#hist[i] + min_index 
-				min_index = np.sum(hist[:i])
-				####### bin W values #####
-				w_real = np.real(self.window_sorted)
-				a = np.sum(w_real[j,min_index:max_index]) #for row j, sum the columns from min to max index of the bin
-				c = hist[i] #number of P_k values in that bin 
-				self.W_col_collapse[j,i] = a/c #compute average W that bin 
-								
-		self.W_collapse = np.zeros((self.nbins,self.nbins)) 
+		self.W_collapse = np.zeros((self.nbins,self.Npix))
 
 		for j in range(self.nbins): # pick a column, only 30 now!
 			min_index = 0
@@ -193,14 +195,37 @@ class Window_Function(object):
 				max_index = np.sum(hist[:i+1])#hist[i] + min_index 
 				min_index = np.sum(hist[:i])
 				####### bin W values #####
-				w_real = np.real(self.W_col_collapse)
+				w_real = np.real(self.window_sorted)
 				a = np.sum(w_real[min_index:max_index,j])
 				c = hist[i] #number of entries in that bin 
 			
 				self.W_collapse[i,j] = a/c #compute average W in that bin
 
-		self.window_binned = self.W_collapse
+		print(self.W_collapse.shape)
 
+
+		rounded_k = np.around(self.k_sorted, decimals = 3)
+		self.reduced_k = np.sort(list(set(rounded_k)))
+
+		binned = []
+
+		for i in range(len(self.reduced_k)):# pick a bin
+			a = 0
+			c = 0
+			for j in range(len(self.k_sorted)): # check which elements are in that bin
+				
+				if self.reduced_k[i] == np.around(self.k_sorted[j],decimals = 3):
+					a += self.W_collapse[:,j]
+					c += 1
+					
+				else:
+					pass
+			
+			binned.append(a/c)
+
+		self.window_binned = np.asarray(binned).T[1:,1:]
+
+		self.reduced_k = self.reduced_k[1:]
 
 	def normalize_window(self):
 
@@ -217,30 +242,37 @@ class Window_Function(object):
 
 		self.window_norm = np.asarray(window_norm)
 
-	def compute_sigma(self):
+	def compute_error_bars(self):
 
+	
 		self.normalize_window()
 
-		self.sigma_k = np.std(self.window_norm, axis = 0)
+		def find_nearest(array, value):
+			array = np.asarray(array)
+			idx = (np.abs(array - value)).argmin()
+			return idx
 
-		return self.sigma_k 
+		lower_bound = np.zeros(self.nbins-1)
+		upper_bound = np.zeros(self.nbins-1)
+		self.k_to_plot = np.zeros(self.nbins-1)
+
+		for i in range(self.window_binned.shape[0]): # try it with the unbinned version maybe?
+
+			pdf = self.window_binned[i]
+			prob = pdf/float(sum(pdf))
+			cum_prob = np.cumsum(prob)
+
+			lower_idx = find_nearest(cum_prob,0.16)
+			upper_idx = find_nearest(cum_prob,0.84)
+			mid_idx = find_nearest(cum_prob, 0.5)
+
+			lower_bound[i] = self.reduced_k[lower_idx]
+			upper_bound[i] = self.reduced_k[upper_idx]
+			mid_k = self.reduced_k[mid_idx]
 
 
-
-
-# 1) normalized window function binning 
-# 2) FWHM error bars
-# 3) 
-
-
-
-
-
-
-
-
-
-
-
-
+			self.k_to_plot[i] = mid_k
+			
+		self.error_bars = np.asarray(list(zip(lower_bound, upper_bound))).T
+		
 

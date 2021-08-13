@@ -2,9 +2,6 @@
 import numpy as np 
 import numpy.linalg as la
 from scipy import signal
-from timeit import default_timer as timer
-import pandas as pd
-
 
 class telescope(object):
 	"""
@@ -27,7 +24,7 @@ class telescope(object):
 			self.beam_width *= np.pi / 180. # FWHM in radians
 
 
-	def compute_2D_bls(self): #DO NOTE RETURN
+	def compute_2D_bls(self): #DO NOTE RETURN 
 		"""
 		Computes the 2D ("uv plane") baselines for a local coordinate
 		system when the observations started.
@@ -190,22 +187,7 @@ class observation(object):
 
 
 
-	def sky_shapes(self):
 
-		self.observable_coordinates()
-
-		x = self.observable_coordinates()[:,1] #phi
-		y = self.observable_coordinates()[:,0]#theta
-
-		null = np.zeros(len(x))
-		df_check = pd.DataFrame.from_dict(np.array([x,y,null]).T)
-
-		df_check.columns = ['phi','theta','temp']
-
-		pivotted_obs_check= df_check.pivot('theta','phi','temp')
-		self.sky_shape = pivotted_obs_check.shape
-
-		return self.sky_shape
 
 	def necessary_times(self): #REUTRN self.times
 		"""
