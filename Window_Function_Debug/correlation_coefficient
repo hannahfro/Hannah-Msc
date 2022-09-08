@@ -1,0 +1,34 @@
+def correlation_coefficient(patch1, patch2): #pearson correlation coefficient
+    product = np.mean((patch1- np.mean(patch1)) * (patch2-np.mean(patch2))) #COV(X,Y)
+    stds = np.std(patch1) * np.std(patch2)# sigma_x * sigma_y
+    if stds == 0:
+        return 0
+    else:
+        product /= stds # normalize by the stdev of the patch
+        return product
+    
+n_row, n_col = wake.shape# here you just need to define the size of the maps. Here I used a map called "wake" so here just put in the name of one of your maps (i.e. 21cm or B-mode)
+
+correlation = np.zeros(((2*n_row)-1,(2*n_col)-1)) #this is the array that holds the Cij Matrix
+
+def correlation_matrix(A, B): #this function takes care of the convolution
+    for i in range(0,(2*n_row)-1): 
+        for j in range(0,(2*n_row)-1):
+
+            if i < n_row and j< n_col:#takes care of all i,j < n_row,n_col includes full ovelap of arrays
+                patch1 = A[:i+1,:j+1]
+                patch2 = B[(n_row-1)-i:n_row,(n_col-1)-j:n_col]
+
+            elif i < n_row and j>= n_col:
+                patch1 = A[:i+1,j-n_col+1:n_col]
+                patch2 = B[(n_row-1)-i:n_row, 0:-j+(n_col-1)]
+
+            elif i >= n_row and j< n_col:
+                patch1 = A[i-n_row+1:n_row,:j+1]
+                patch2 = B[0:-i+(n_row-1),(n_col-1)-j:n_col]
+
+            else: 
+                patch1 = A[i-n_row+1:n_row,j-n_col+1:n_col]
+                patch2 = B[0:-i+(n_row-1),0:-j+(n_col-1)]
+
+            correlation[i, j] = correlation_coefficient(patch1,patch2)

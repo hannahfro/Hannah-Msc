@@ -101,9 +101,10 @@ class universe(object):
 			
 					self.stdev_box[i,j] = 1
 				else:
-					self._box[i,j] = 0 
+					self.fft_box[i,j] = 0 
 		
 		self.fft_box_stdev = self.fft_box * self.stdev_box
+
  
 	######### IMPOSE SYMMETRY CONDITIONS SO THAT IFT IS REAL #########
 

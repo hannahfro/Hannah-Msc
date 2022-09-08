@@ -2,8 +2,6 @@ import numpy as np
 import scipy.constants as sc
 import matplotlib.pyplot as plt
 
- 
-
 def CCAT_p(sky, RA, DEC, freq, dish_diameter, noise, sigma_sys, t_obs, beam_FWHM):
 
 	#Sky should be a 2D image
@@ -50,7 +48,7 @@ def CCAT_p(sky, RA, DEC, freq, dish_diameter, noise, sigma_sys, t_obs, beam_FWHM
 	
 
 ############### CONVOLVE WITH GAUSSIAN ###########
-
+#
 
 	xx, yy = np.meshgrid(RA,DEC, sparse = True) #probs with the meshgrid
 
@@ -92,6 +90,16 @@ def CCAT_p(sky, RA, DEC, freq, dish_diameter, noise, sigma_sys, t_obs, beam_FWHM
 		noise = np.random.normal(0,sigma_rms, (npix_y,npix_x))
 
 		new_sky += noise
+
+
+		# sky_sd = np.std(sky+noise);
+		# sky_mean = np.mean(sky+noise);
+		# og_snr = sky_mean / sky_sd
+
+		# newsky_sd = np.std(new_sky);
+		# newsky_mean = np.mean(new_sky);
+		# new_snr = newsky_mean / newsky_sd
+		# print(og_snr , np.real(new_snr))
 
 	else:
 		pass 

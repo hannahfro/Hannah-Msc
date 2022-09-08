@@ -1,0 +1,14 @@
+Useful Command Line Stuff
+
+
+1. Deleting all files in a directory that start with some string 'slurm'
+	find  . -name 'slurm*' -exec rm {} \;
+
+	find . -type f -name slurm\* -exec rm {} \;   (specifying that it is files that you are looking for)
+
+2. change permission on a file named bash.sh and make it executable for only the owner of the file (u flag). Can also use a+x for permission for all. 
+	chmod u+x bash.sh
+
+3. Check the bash version
+
+	echo "Bash version ${BASH_VERSION}..."

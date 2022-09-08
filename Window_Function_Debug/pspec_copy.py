@@ -52,9 +52,7 @@ class Power_Spectrum(object):
 
         self.k = np.asarray(k)
 
-        idx = np.argwhere(self.k > self.cutoff_k)
-
-        self.k_del = np.delete(self.k,idx)       
+          
 
     def compute_kbox(self):
         self.compute_k_2D()

@@ -2,9 +2,11 @@
 import numpy as np 
 import numpy.linalg as la
 from scipy import signal
-from timeit import default_timer as timer
+import scipy.constants as sc
+# from timeit import default_timer as timer
 import pandas as pd
 import matplotlib.pyplot as plt
+
 
 class telescope(object):
 	"""
@@ -13,12 +15,12 @@ class telescope(object):
 	---Array configuration
 	---Primary beam
 	"""
-	def __init__(self, ant_locs, latitude, channel_width, Tsys, beam_width, beam='gaussian'):
+	def __init__(self, ant_locs, latitude, channel_width, beam_width, beam='gaussian'):
 		self.ant_locs = ant_locs # (Nants,2) sized array # relative position in meters 
 		self.latitude = latitude # degrees this is the central latitute of the HERA strip 
 		self.latitude *= np.pi / 180. # radians
 		self.channel_width = channel_width # assume Hz
-		self.Tsys = Tsys # assume Kelvin
+		
 		if beam != 'gaussian':
 			raise NotImplementedError()
 		else:
@@ -105,11 +107,12 @@ class observation(object):
 		self.ant_locs = telescope.ant_locs
 		self.latitude = telescope.latitude
 		self.channel_width = telescope.channel_width
-		self.Tsys = telescope.Tsys
 		self.bls_celestial = telescope.compute_celestial_bls()
 		self.ucounts = telescope.ucounts # number of unique baselines
 		
 		self.freq = freq #MHz
+		self.Tsys = 100+(120*((self.freq/150)**(-2.55)))
+
 		self.npix_theta = sky_shape[0]
 		self.npix_phi = sky_shape[1]
 
@@ -224,7 +227,7 @@ class observation(object):
 		else: ### and if else about psource fg
 			self.position = self.observable_coordinates() 
 			
-		time_length = np.abs(self.position[self.position.shape[0]-1,1]-self.position[0,1])/ (np.pi*2.)#fraction of roation you've completed in observing window
+		time_length = np.abs(self.position[self.position.shape[0]-1,1]-self.position[0,1])/ (np.pi*2.)#fraction of day you observe the sky in question [day]
 		self.times = np.arange(0., time_length, self.delta_t)#units here odn't make sense
 		self.Nt = len(self.times) #this is the number of times the telescope makes an observation
 		return self.times # in fraction of circle
@@ -343,7 +346,7 @@ class observation(object):
 
 			for i in range(self.Nt): #compute the elements of pbeam
 				primary[i] = np.exp(-((self.position[:,1]-phis[i])**2 +(self.position[:,0]-co_lat)**2) / float(self.beam_width**2))# 2D gaussian beam (N_position,2)
-		
+				
 			if psource_beam is not None: 
 				# concatenate the psource primary here
 				psource_primary = np.fromfile('psource_beam.bin', dtype=np.float32)
@@ -359,6 +362,8 @@ class observation(object):
 		# assume primary beam is same for all baselines
 		# Want self.pbeam to have shape N_t N_bl x Npix
 		# where we cycle rapidly through time
+
+		# self.primary = primary
 
 		self.pbeam = np.vstack([primary] * self.Nbl) #to replace the for loop pbeam
 		
@@ -377,9 +382,10 @@ class observation(object):
 		self.compute_beam(psource_beam)
 		self.compute_bdotr(psource_data)
 		
-		wavelength = (3e8)/float(self.freq*1e6) # in m
+		wavelength = sc.c/float(self.freq*1e6) # in m
 
-		exponent = np.exp(-1j * 2 * np.pi*(self.bdotr/ float(wavelength)))
+		exponent = np.exp((-1j * 2 * np.pi*self.bdotr)/ float(wavelength))
+
 		## A has shape of Nt Nbl x N_pix
 		## cycling through time more rapidly
 		# pix_size = self.resol ** 2
@@ -390,16 +396,57 @@ class observation(object):
 	
 		if self.primary_beam == True: #the compute Amat with pbeam 
 			
-			self.Amat = self.pbeam*exponent*self.delta_theta*self.delta_phi
+			self.Amat = exponent*self.pbeam*self.delta_theta*self.delta_phi
 			
 		elif self.primary_beam == False: # this computes Amat without the pbeam
 			self.Amat = exponent*self.delta_phi*self.delta_theta
 		else: 
 			raise ValueError('You should indicate the use of a primary beam')
 		
-
-		self.noise_rms =  self.Tsys / np.sqrt(2*self.n_days*self.delta_t * self.channel_width)
+		# tau = (self.n_days*self.delta_t*self.Nt*86400)# total integration time in s 
+		self.noise_rms =  self.Tsys / np.sqrt(2*self.Nt*self.n_days*self.delta_t* self.channel_width)
 		self.invN = np.diag(np.repeat(self.ucounts, self.Nt)) * (1/float((self.noise_rms)**2)) #Nt N_unique_bls x Nt N_unique_bls diagonal array
+
+	def compute_general_A(self,psource_data,psource_beam):
+
+		"""
+		Compute A matrix
+		"""
+		if self.times is not None:
+			pass
+		else:   
+			self.times = self.necessary_times()
+		
+		self.sky_shapes()
+			
+		self.compute_beam(psource_beam)
+		self.compute_bdotr(psource_data)
+		
+		exponent = (-1j * 2 * np.pi*self.bdotr)/(3e8)
+		## A has shape of Nt Nbl x N_pix
+		## cycling through time more rapidly
+		# pix_size = self.resol ** 2
+
+		self.delta_phi = self.position[self.sky_shape[1],1]-self.position[0,1]
+		self.delta_theta = self.position[1,0]-self.position[0,0]
+
+	
+		if self.primary_beam == True: #the compute Amat with pbeam 
+			
+			self.A_exp = exponent
+			self.A_beam = self.pbeam*self.delta_theta*self.delta_phi
+
+		elif self.primary_beam == False: # this computes Amat without the pbeam
+			self.Amat_exponentg = exponent
+			self.A_beam = self.delta_phi*self.delta_theta
+		else: 
+			raise ValueError('You should indicate the use of a primary beam')
+		
+		# tau = (self.n_days*self.delta_t*self.Nt*86400)# total integration time in s 
+		self.noise_rms_general =  1 / np.sqrt(2*self.Nt*self.n_days*self.delta_t* self.channel_width)
+		self.invN_general = np.repeat(self.ucounts, self.Nt) * (1/float((self.noise_rms_general)**2)) #Nt N_unique_bls x Nt N_unique_bls diagonal array
+
+
 	
 
 	def compute_vis(self,vec,psource_data, psource_beam): #DO NOT RETURN
@@ -505,7 +552,7 @@ class observation(object):
 
 
 			# print(self.norm[1])
- 
+	
 	def convolve_map(self,vec,psource_data,psource_beam ): #DO NOT RETURN
 		
 		
@@ -530,7 +577,7 @@ class observation(object):
 			self.map = np.dot(self.norm,((np.conj(self.Amat)).T).dot(self.invN).dot(self.Adotx))
 			
 			#end timer here
-			return self.map 
+			# return self.map 
 			# end = timer()
 			# runtime = end-start
 			# return runtime
@@ -540,7 +587,7 @@ class observation(object):
 
 			self.map = ((np.conj(self.Amat)).T).dot(self.invN).dot(self.Adotx)
 		
-			return self.map
+			# return self.map
 			# end = timer()
 			# runtime = end-start
 			# return runtime 

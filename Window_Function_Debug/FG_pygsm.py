@@ -8,6 +8,7 @@ import scipy.constants as sc
 from astroquery.vizier import Vizier
 import HERA_hack_FG
 
+
 ####CODE FOR ADDING FOREGROUNDS####
 
 #1. Galactic Synchrotron Portion
@@ -30,14 +31,14 @@ class foregrounds(object):
 		self.freq_fid = freq_fid #In MHz
 
 		self.freq = obs.freq
-		self.Npix = len(obs.observable_coordinates())
+		self.Npix = obs.npix_theta*obs.npix_phi
 		self.observable_coordinates = obs.observable_coordinates()
-		obs.necessary_times()
-		self.latitude = obs.latitude 
-		self.times = obs.times 
-		self.Nt = obs.Nt
-		self.position  = obs.position
-		self.beam_width = obs.beam_width
+		# obs.necessary_times()
+		# self.latitude = obs.latitude 
+		# self.times = obs.times 
+		# self.Nt = obs.Nt
+		# self.position  = obs.position
+		# self.beam_width = obs.beam_width
 
 
 		#inheret observation properties like where in the sky/at what freq the observation is made.
@@ -56,9 +57,9 @@ class foregrounds(object):
 
 		nside = 1024
 		#Reads in the file for the frequecny in question
-		diffuse_synchrotron = np.fromfile('pygdsm_%sMHz.bin'%self.freq, dtype=np.float32)
+		diffuse_synchrotron = np.fromfile('/Users/hannahfronenberg/Documents/GitHub/Hannah-Msc/SAZERAC/pygsm_maps/pygdsm_%sMHz.bin'%self.freq, dtype=np.float32)
 
-		obs_index = hp.pixelfunc.ang2pix(nside, self.observable_coordinates[:,0],self.observable_coordinates[:,1])
+		obs_index = hp.pixelfunc.ang2pix(nside, self.observable_coordinates[:self.Npix,0],self.observable_coordinates[:self.Npix,1])
 
 		self.gal_emission = []
 
@@ -186,11 +187,14 @@ class foregrounds(object):
 
 		'''
 
-
 		Vizier.ROW_LIMIT = -1
-		catalog_list = Vizier.find_catalogs('GLEAM')
+		catalog_list = Vizier.find_catalogs('Kang W15')
 		catalogs = Vizier.get_catalogs(catalog_list.keys())
 
+		print(catalog_list)
+		print(catalogs)
+
+		assert False
 		'''
 		--------------------------------------------------------------------------------
 		 FileName        Lrecl  Records   Explanations
@@ -209,10 +213,19 @@ class foregrounds(object):
 		#Details of the keys are available here: http://cdsarc.u-strasbg.fr/ftp/cats/VIII/100/ReadMe
 		#And in more details here: https://heasarc.gsfc.nasa.gov/W3Browse/all/gleamegcat.html
 
+
+
 		src_name = tt['GLEAM'] #Source ID
-		RA       = tt['RAJ2000'] #RA
+		RA       = tt['RAJ2000'] #RA 
 		DEC      = tt['DEJ2000'] #DEC
-		flux     = tt['Fpwide'] #Peak flux in wide (170-231MHz) image
+		if 170 <= self.freq <= 231:
+			flux     = tt['Fpwide'] #Peak flux in wide (170-231MHz) image
+		elif 162 <= self.freq < 170:
+			flux = tt['Fp166'] #Peak flux in wide (162-170MHz) image
+		elif 154 <= self.freq < 162:
+			flux = tt['Fp158'] #Peak flux in wide (154-162MHz) image
+		elif 147 <= self.freq < 154:
+			flux = tt['Fp151'] #Peak flux in wide (154-162MHz) image
 
 ###########UNIT CONVERSIONS ################################
 
@@ -316,7 +329,7 @@ class foregrounds(object):
 
 		self.compute_omega()
 
-		wavelength_fid = sc.c/self.freq #meters
+		wavelength_fid = 1.525 #meters
 
 		#temp_conv = (sc.c**2)/(2*sc.k*((self.freq_fid*1e6)**2))
 
@@ -370,7 +383,6 @@ class foregrounds(object):
 
 			return self.fg_map
 
-		##turn into visibilities here before reintegrading i think! 
 
 
 
